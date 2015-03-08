@@ -38,10 +38,10 @@ public class ZipFileRecordReader
     private ZipInputStream zip;
 
     /** Uncompressed file name */
-    private Text currentKey;
+    private Text currentKey = new Text();
 
     /** Uncompressed file contents */
-    private BytesWritable currentValue;
+    private BytesWritable currentValue = new BytesWritable();
 
     /** Used to indicate progress */
     private boolean isFinished = false;
@@ -53,6 +53,8 @@ public class ZipFileRecordReader
     private InputStream in;
     
     private boolean processed = false;
+    
+    private int fileLength = 0;
 
     /**
      * Initialise and open the ZIP file from the FileSystem
@@ -75,12 +77,33 @@ public class ZipFileRecordReader
 
         Path file = fileSplit.getPath();
         //CompressionCodec codec = new GzipCodec();
+        
+        fileLength = (int) fileSplit.getLength();
+        
         CompressionCodecFactory factory = new CompressionCodecFactory(conf);
         // the correct codec will be discovered by the extension of the file
         CompressionCodec codec = factory.getCodec(file);
         
         FileSystem fs = file.getFileSystem(conf);
-        in = codec.createInputStream(fs.open(file));
+        in = fs.open(file);
+        
+        if (codec != null) {
+            if (codec instanceof GzipCodec) {
+                byte[] len = new byte[4];
+                try {
+                    in.skip(fileLength - 4);
+                    IOUtils.readFully(in, len, 0, len.length);
+                    fileLength = (len[3] << 24) | (len[2] << 16) + (len[1] << 8) + len[0];
+                    System.out.println(fileLength);
+                } finally {
+                    in.close();
+                }
+            }
+
+            in = fs.open(file);
+            in = codec.createInputStream(in);
+        }
+        
 
         //compressionCodecs = new CompressionCodecFactory(conf);
 
@@ -109,13 +132,13 @@ public class ZipFileRecordReader
     {
         
     	 if (!processed) {
-             byte[] contents = new byte[(int) fileSplit.getLength()];
+             byte[] contents = new byte[fileLength];
              Path file = fileSplit.getPath();
              currentKey.set(file.getName());
-
+             
              try {
-                 IOUtils.readFully(in, contents, 0, contents.length);
-                 currentValue.set(contents, 0, contents.length);
+                 IOUtils.readFully(in, contents, 0, fileLength);
+                 currentValue.set(contents, 0, fileLength);
              } finally {
                  IOUtils.closeStream(in);
              }

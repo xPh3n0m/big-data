@@ -31,7 +31,7 @@ public class WordCount {
       // NOTE: the filename is the *full* path within the ZIP file
       // e.g. "subdir1/subsubdir2/Ulysses-18.txt"
       String filename = key.toString();
-      
+      filename = filename.substring(0, filename.indexOf(".gz"));
       
       // Prepare the content 
       String content = new String( value.getBytes(), "UTF-8" );
