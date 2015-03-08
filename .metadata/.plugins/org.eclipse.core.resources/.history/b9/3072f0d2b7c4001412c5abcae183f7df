@@ -1,0 +1,105 @@
+package mapred;
+
+import java.io.IOException;
+import java.util.StringTokenizer;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.BytesWritable;
+import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapred.TextOutputFormat;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+
+public class Gunzip {
+
+  public static class TokenizerMapper
+       extends Mapper<Text, BytesWritable, Text, BytesWritable>{
+
+    public void map(Text key, BytesWritable value, Context context
+                    ) throws IOException, InterruptedException {
+    	
+      context.write(key, value);
+    }
+  }
+  
+  /**
+   * This Mapper class checks the filename ends with the .txt extension, cleans
+   * the text and then applies the simple WordCount algorithm.
+   *
+   */
+  public static class MyMapper
+      extends Mapper<Text, BytesWritable, Text, IntWritable>
+  {
+      private final static IntWritable one = new IntWritable( 1 );
+      private Text word = new Text();
+
+      public void map( Text key, BytesWritable value, Context context )
+          throws IOException, InterruptedException
+      {
+          // NOTE: the filename is the *full* path within the ZIP file
+          // e.g. "subdir1/subsubdir2/Ulysses-18.txt"
+          String filename = key.toString();
+          
+          // We only want to process .txt files
+          if ( filename.endsWith(".txt") == false )
+              return;
+          
+          // Prepare the content 
+          String content = new String( value.getBytes(), "UTF-8" );
+          content = content.replaceAll( "[^A-Za-z \n]", "" ).toLowerCase();
+          
+          // Tokenize the content
+          StringTokenizer tokenizer = new StringTokenizer( content );
+          while ( tokenizer.hasMoreTokens() )
+          {
+              word.set( tokenizer.nextToken() );
+              context.write( word, one );
+          }
+      }
+  }
+  
+  /**
+   * Reducer for the ZipFile test, identical to the standard WordCount example
+   */
+  public static class MyReducer
+      extends Reducer<Text, IntWritable, Text, IntWritable>
+  {
+      public void reduce( Text key, Iterable<IntWritable> values, Context context )
+          throws IOException, InterruptedException
+      {
+          int sum = 0;
+          for ( IntWritable val : values )
+          {
+              sum += val.get();
+          }
+          context.write(key, new IntWritable(sum));
+      }
+  }
+
+
+  public static void main(String[] args) throws Exception {
+    Configuration conf = new Configuration();
+    Job job = Job.getInstance(conf, "gunzip");
+    
+    job.setJarByClass(Gunzip.class);
+    
+    job.setMapperClass(MyMapper.class);
+    job.setReducerClass(MyReducer.class);
+    
+    job.setInputFormatClass(GzipInputFormat.class);
+    
+    // The output files will contain "Word [TAB] Count"
+    job.setOutputKeyClass(Text.class);
+    job.setOutputValueClass(IntWritable.class);
+    
+    FileInputFormat.addInputPath(job, new Path(args[0]));
+    FileOutputFormat.setOutputPath(job, new Path(args[1]));
+    
+    System.exit(job.waitForCompletion(true) ? 0 : 1);
+  }
+}
