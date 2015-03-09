@@ -39,7 +39,7 @@ public class WordCount {
       URI uri = outputPath.toUri();
       
       
-      FileUtils.writeByteArrayToFile(new File(uri.getPath() + "/" + filename), value.copyBytes());
+      FileUtils.writeByteArrayToFile(new File(uri.getPath() + "1/" + filename), value.copyBytes());
   }
 }
   
@@ -59,6 +59,8 @@ public class WordCount {
     // The output files will contain "Word [TAB] Count"
     job.setOutputKeyClass(Text.class);
     job.setOutputValueClass(IntWritable.class);
+    
+    job.setNumReduceTasks(0);
     
     //
     FileInputFormat.addInputPath(job, new Path(args[0]));
