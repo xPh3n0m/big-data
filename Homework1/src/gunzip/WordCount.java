@@ -17,6 +17,7 @@ import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+import org.apache.hadoop.mapreduce.lib.output.NullOutputFormat;
 
 public class WordCount {
   
@@ -35,9 +36,11 @@ public class WordCount {
       // Prepare the content 
       String content = new String( value.getBytes() );
       
+      
       Path outputPath = FileOutputFormat.getOutputPath(context);
       URI uri = outputPath.toUri();
       
+      System.out.println(uri.getPath());
       
       FileUtils.writeByteArrayToFile(new File(uri.getPath() + "/" + filename), value.copyBytes());
   }
@@ -55,6 +58,8 @@ public class WordCount {
     
     // 
     job.setInputFormatClass(ZipFileInputFormat.class);
+    
+    job.setOutputFormatClass(NullOutputFormat.class);
     
     // The output files will contain "Word [TAB] Count"
     job.setOutputKeyClass(Text.class);
