@@ -39,7 +39,7 @@ public class WordCount {
       URI uri = outputPath.toUri();
       
       
-      FileUtils.writeByteArrayToFile(new File(uri.getPath() + "/" + filename), value.copyBytes());
+      FileUtils.writeByteArrayToFile(new File(uri.getPath() + "1/" + filename), value.copyBytes());
   }
 }
   
