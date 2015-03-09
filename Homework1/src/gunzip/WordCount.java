@@ -3,6 +3,7 @@ package gunzip;
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.net.URI;
 import java.util.StringTokenizer;
 
 import org.apache.commons.io.FileUtils;
@@ -28,15 +29,17 @@ public class WordCount {
   public void map( Text key, BytesWritable value, Context context )
       throws IOException, InterruptedException
   {
-      // NOTE: the filename is the *full* path within the ZIP file
-      // e.g. "subdir1/subsubdir2/Ulysses-18.txt"
       String filename = key.toString();
       filename = filename.substring(0, filename.indexOf(".gz"));
       
       // Prepare the content 
-      String content = new String( value.getBytes(), "UTF-8" );
+      String content = new String( value.getBytes() );
       
-      FileUtils.writeStringToFile(new File("output/" + filename), content);
+      Path outputPath = FileOutputFormat.getOutputPath(context);
+      URI uri = outputPath.toUri();
+      
+      
+      FileUtils.writeByteArrayToFile(new File(uri.getPath() + "/" + filename), value.copyBytes());
   }
 }
   

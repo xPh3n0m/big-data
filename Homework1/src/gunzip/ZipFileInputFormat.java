@@ -22,7 +22,7 @@ public class ZipFileInputFormat
     private static boolean isLenient = false;
     
     /**
-     * ZIP files are not splitable
+     * GZIP files are not splitable
      */
     @Override
     protected boolean isSplitable( JobContext context, Path filename )
