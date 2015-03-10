@@ -12,8 +12,8 @@ import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 
 /**
- * Extends the basic FileInputFormat class provided by Apache Hadoop to accept GZIP files. It should be noted that ZIP
- * files are not 'splittable' and each ZIP file will be processed by a single Mapper.
+ * Extends FileInputFormat class. Makes sure that files are not split (as gzip files are not splitable)
+ * It creates a GzipRecordReader instead of the default record reader
  */
 public class GzipFileInputFormat
     extends FileInputFormat<Text, BytesWritable>
@@ -29,7 +29,7 @@ public class GzipFileInputFormat
     }
 
     /**
-     * Create the GZipFileRecordReader to parse the file
+     * Create a GZipFileRecordReader
      */
     @Override
     public RecordReader<Text, BytesWritable> createRecordReader( InputSplit split, TaskAttemptContext context )

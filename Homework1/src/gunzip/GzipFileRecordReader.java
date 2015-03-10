@@ -1,12 +1,7 @@
 package gunzip;
 
-import java.io.ByteArrayOutputStream;
-import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipException;
-import java.util.zip.ZipInputStream;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
@@ -23,27 +18,17 @@ import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.lib.input.FileSplit;
 
-/**
- * This RecordReader implementation extracts individual files from a ZIP
- * file and hands them over to the Mapper. The "key" is the decompressed
- * file name, the "value" is the file contents.
- */
+
 public class GzipFileRecordReader
     extends RecordReader<Text, BytesWritable>
 {
-    /** InputStream used to read the ZIP file from the FileSystem */
     private FSDataInputStream fsin;
-
-    /** ZIP file parser/decompresser */
-    private ZipInputStream zip;
 
     /** Uncompressed file name */
     private Text currentKey = new Text();
 
-    /** Uncompressed file contents */
     private BytesWritable currentValue = new BytesWritable();
 
-    /** Used to indicate progress */
     private boolean isFinished = false;
     
     private FileSplit fileSplit;
@@ -60,6 +45,9 @@ public class GzipFileRecordReader
     
     private CompressionCodec codec;
 
+    /**
+     * Prepares the codec and gets the size of the file
+     */
     @Override
     public void initialize( InputSplit inputSplit, TaskAttemptContext taskAttemptContext )
         throws IOException, InterruptedException
@@ -73,10 +61,11 @@ public class GzipFileRecordReader
         
         CompressionCodecFactory factory = new CompressionCodecFactory(conf);
         codec = factory.getCodec(file);
-       
     }
 
-    
+    /**
+     * Checks whether the file was previously 
+     */
     @Override
     public boolean nextKeyValue()
         throws IOException, InterruptedException
@@ -86,6 +75,7 @@ public class GzipFileRecordReader
 	        FileSystem fs = file.getFileSystem(conf);
 	        in = fs.open(file);
 	        
+	        // Get the size of the decompressed file
 	        if (codec != null) {
 	            if (codec instanceof GzipCodec) {
 	                byte[] len = new byte[4];
@@ -100,29 +90,27 @@ public class GzipFileRecordReader
 
 	            in = fs.open(file);
 	            in = codec.createInputStream(in);
-	        }
-    		 
-             byte[] contents = new byte[fileLength];
-             Path file = fileSplit.getPath();
-             currentKey.set(file.getName());
-             
-             try {
-                 IOUtils.readFully(in, contents, 0, fileLength);
-                 currentValue.set(contents, 0, fileLength);
-             } finally {
-                 IOUtils.closeStream(in);
-             }
+	            
+	            byte[] contents = new byte[fileLength];
+	             Path file = fileSplit.getPath();
+	             currentKey.set(file.getName());
+	             
+	             try {
+	                 IOUtils.readFully(in, contents, 0, fileLength);
+	                 currentValue.set(contents, 0, fileLength);
+	             } finally {
+	                 IOUtils.closeStream(in);
+	             }
 
-             processed = true;
-             return true;
+	             processed = true;
+	             return true;
+	        }
+             
          }
 
          return false;
     }
 
-    /**
-     * Rather than calculating progress, we just keep it simple
-     */
     @Override
     public float getProgress()
         throws IOException, InterruptedException
@@ -130,9 +118,6 @@ public class GzipFileRecordReader
         return isFinished ? 1 : 0;
     }
 
-    /**
-     * Returns the current key (name of the zipped file)
-     */
     @Override
     public Text getCurrentKey()
         throws IOException, InterruptedException
@@ -140,9 +125,6 @@ public class GzipFileRecordReader
         return currentKey;
     }
 
-    /**
-     * Returns the current value (contents of the zipped file)
-     */
     @Override
     public BytesWritable getCurrentValue()
         throws IOException, InterruptedException
@@ -150,14 +132,14 @@ public class GzipFileRecordReader
         return currentValue;
     }
 
-    /**
-     * Close quietly, ignoring any exceptions
-     */
     @Override
     public void close()
         throws IOException
     {
-        try { zip.close(); } catch ( Exception ignore ) { }
-        try { fsin.close(); } catch ( Exception ignore ) { }
+        try { 
+        	fsin.close(); 
+        } catch ( Exception ignore ) { 
+        	
+        }
     }
 }
