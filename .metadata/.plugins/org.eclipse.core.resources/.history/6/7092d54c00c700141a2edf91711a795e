@@ -35,18 +35,13 @@ public class WordCount {
       filename = filename.substring(0, filename.indexOf(".gz"));
       
       // Prepare the content 
-      //String content = new String( value.getBytes() );
+      String content = new String( value.getBytes() );
       
       Path outputPath = FileOutputFormat.getOutputPath(context);
       outputPath = new Path(outputPath.toString() + "/" + filename);
-      //URI uri = outputPath.toUri();
-      
-      FileSystem fs = FileSystem.get(context.getConfiguration());
-      FSDataOutputStream out = fs.create(outputPath);
-      out.write(value.copyBytes());
-      out.close();
+      URI uri = outputPath.toUri();
 
-      //FileUtils.writeByteArrayToFile(new File(uri.getPath()), value.copyBytes());
+      FileUtils.writeByteArrayToFile(new File(uri.getPath()), value.copyBytes());
   }
 }
   
