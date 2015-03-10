@@ -8,9 +8,11 @@ import java.util.StringTokenizer;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
@@ -22,10 +24,8 @@ import org.apache.hadoop.mapreduce.lib.output.NullOutputFormat;
 public class WordCount {
   
   public static class MyMapper
-  extends Mapper<Text, BytesWritable, Text, IntWritable>
+  extends Mapper<Text, BytesWritable, NullWritable, NullWritable>
 {
-  private final static IntWritable one = new IntWritable( 1 );
-  private Text word = new Text();
 
   public void map( Text key, BytesWritable value, Context context )
       throws IOException, InterruptedException
@@ -36,13 +36,17 @@ public class WordCount {
       // Prepare the content 
       String content = new String( value.getBytes() );
       
-      
       Path outputPath = FileOutputFormat.getOutputPath(context);
       URI uri = outputPath.toUri();
       
+      Configuration conf = new Configuration();
+      FileSystem fs = FileSystem.get(uri, conf);
+      
+      fs.create(outputPath);
+      
       System.out.println(uri.getPath());
       
-      FileUtils.writeByteArrayToFile(new File(uri.getPath() + "/" + filename), value.copyBytes());
+      //FileUtils.writeByteArrayToFile(new File(uri.getPath() + "/" + filename), value.copyBytes());
   }
 }
   
@@ -53,21 +57,14 @@ public class WordCount {
     
     job.setJarByClass(WordCount.class);
     
- // Standard stuff
     job.setMapperClass(MyMapper.class);
     
-    // 
-    job.setInputFormatClass(ZipFileInputFormat.class);
+    job.setInputFormatClass(GzipFileInputFormat.class);
     
     job.setOutputFormatClass(NullOutputFormat.class);
     
-    // The output files will contain "Word [TAB] Count"
-    job.setOutputKeyClass(Text.class);
-    job.setOutputValueClass(IntWritable.class);
-    
     job.setNumReduceTasks(0);
     
-    //
     FileInputFormat.addInputPath(job, new Path(args[0]));
     FileOutputFormat.setOutputPath(job, new Path(args[1]));
     
