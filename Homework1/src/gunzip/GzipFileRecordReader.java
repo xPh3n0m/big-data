@@ -55,6 +55,10 @@ public class GzipFileRecordReader
     private boolean processed = false;
     
     private int fileLength = 0;
+    
+    private Path file;
+    
+    private CompressionCodec codec;
 
     @Override
     public void initialize( InputSplit inputSplit, TaskAttemptContext taskAttemptContext )
@@ -63,49 +67,41 @@ public class GzipFileRecordReader
         this.fileSplit = (FileSplit) inputSplit;
         this.conf = taskAttemptContext.getConfiguration();
 
-        Path file = fileSplit.getPath();
+        file = fileSplit.getPath();
         
         fileLength = (int) fileSplit.getLength();
         
         CompressionCodecFactory factory = new CompressionCodecFactory(conf);
-        CompressionCodec codec = factory.getCodec(file);
-        
-        FileSystem fs = file.getFileSystem(conf);
-        in = fs.open(file);
-        
-        if (codec != null) {
-            if (codec instanceof GzipCodec) {
-                byte[] len = new byte[4];
-                try {
-                    in.skip(fileLength - 4);
-                    IOUtils.readFully(in, len, 0, len.length);
-                    fileLength = (len[3] << 24) | (len[2] << 16) + (len[1] << 8) + len[0];
-                } finally {
-                    in.close();
-                }
-            }
-
-            in = fs.open(file);
-            in = codec.createInputStream(in);
-        }
-        
+        codec = factory.getCodec(file);
+       
     }
 
-    /**
-     * This is where the magic happens, each ZipEntry is decompressed and
-     * readied for the Mapper. The contents of each file is held *in memory*
-     * in a BytesWritable object.
-     * 
-     * If the ZipFileInputFormat has been set to Lenient (not the default),
-     * certain exceptions will be gracefully ignored to prevent a larger job
-     * from failing.
-     */
+    
     @Override
     public boolean nextKeyValue()
         throws IOException, InterruptedException
     {
         
     	 if (!processed) {
+	        FileSystem fs = file.getFileSystem(conf);
+	        in = fs.open(file);
+	        
+	        if (codec != null) {
+	            if (codec instanceof GzipCodec) {
+	                byte[] len = new byte[4];
+	                try {
+	                    in.skip(fileLength - 4);
+	                    IOUtils.readFully(in, len, 0, len.length);
+	                    fileLength = (len[3] << 24) | (len[2] << 16) + (len[1] << 8) + len[0];
+	                } finally {
+	                    in.close();
+	                }
+	            }
+
+	            in = fs.open(file);
+	            in = codec.createInputStream(in);
+	        }
+    		 
              byte[] contents = new byte[fileLength];
              Path file = fileSplit.getPath();
              currentKey.set(file.getName());

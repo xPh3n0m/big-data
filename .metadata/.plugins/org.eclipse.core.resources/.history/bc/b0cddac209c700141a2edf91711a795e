@@ -1,0 +1,159 @@
+package gunzip;
+
+import java.io.ByteArrayOutputStream;
+import java.io.EOFException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipException;
+import java.util.zip.ZipInputStream;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.BytesWritable;
+import org.apache.hadoop.io.IOUtils;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.compress.CompressionCodec;
+import org.apache.hadoop.io.compress.CompressionCodecFactory;
+import org.apache.hadoop.io.compress.GzipCodec;
+import org.apache.hadoop.mapreduce.RecordReader;
+import org.apache.hadoop.mapreduce.InputSplit;
+import org.apache.hadoop.mapreduce.TaskAttemptContext;
+import org.apache.hadoop.mapreduce.lib.input.FileSplit;
+
+/**
+ * This RecordReader implementation extracts individual files from a ZIP
+ * file and hands them over to the Mapper. The "key" is the decompressed
+ * file name, the "value" is the file contents.
+ */
+public class GzipFileRecordReader
+    extends RecordReader<Text, BytesWritable>
+{
+    /** InputStream used to read the ZIP file from the FileSystem */
+    private FSDataInputStream fsin;
+
+    /** ZIP file parser/decompresser */
+    private ZipInputStream zip;
+
+    /** Uncompressed file name */
+    private Text currentKey = new Text();
+
+    /** Uncompressed file contents */
+    private BytesWritable currentValue = new BytesWritable();
+
+    /** Used to indicate progress */
+    private boolean isFinished = false;
+    
+    private FileSplit fileSplit;
+    
+    private Configuration conf;
+    
+    private InputStream in;
+    
+    private boolean processed = false;
+    
+    private int fileLength = 0;
+
+    @Override
+    public void initialize( InputSplit inputSplit, TaskAttemptContext taskAttemptContext )
+        throws IOException, InterruptedException
+    {
+        this.fileSplit = (FileSplit) inputSplit;
+        this.conf = taskAttemptContext.getConfiguration();
+
+        Path file = fileSplit.getPath();
+        
+        fileLength = (int) fileSplit.getLength();
+        
+        CompressionCodecFactory factory = new CompressionCodecFactory(conf);
+        CompressionCodec codec = factory.getCodec(file);
+        
+        FileSystem fs = file.getFileSystem(conf);
+        in = fs.open(file);
+        
+        if (codec != null) {
+            if (codec instanceof GzipCodec) {
+                byte[] len = new byte[4];
+                try {
+                    in.skip(fileLength - 4);
+                    IOUtils.readFully(in, len, 0, len.length);
+                    fileLength = (len[3] << 24) | (len[2] << 16) + (len[1] << 8) + len[0];
+                } finally {
+                    in.close();
+                }
+            }
+
+            in = fs.open(file);
+            in = codec.createInputStream(in);
+        }
+        
+    }
+
+    
+    @Override
+    public boolean nextKeyValue()
+        throws IOException, InterruptedException
+    {
+        
+    	 if (!processed) {
+             byte[] contents = new byte[fileLength];
+             Path file = fileSplit.getPath();
+             currentKey.set(file.getName());
+             
+             try {
+                 IOUtils.readFully(in, contents, 0, fileLength);
+                 currentValue.set(contents, 0, fileLength);
+             } finally {
+                 IOUtils.closeStream(in);
+             }
+
+             processed = true;
+             return true;
+         }
+
+         return false;
+    }
+
+    /**
+     * Rather than calculating progress, we just keep it simple
+     */
+    @Override
+    public float getProgress()
+        throws IOException, InterruptedException
+    {
+        return isFinished ? 1 : 0;
+    }
+
+    /**
+     * Returns the current key (name of the zipped file)
+     */
+    @Override
+    public Text getCurrentKey()
+        throws IOException, InterruptedException
+    {
+        return currentKey;
+    }
+
+    /**
+     * Returns the current value (contents of the zipped file)
+     */
+    @Override
+    public BytesWritable getCurrentValue()
+        throws IOException, InterruptedException
+    {
+        return currentValue;
+    }
+
+    /**
+     * Close quietly, ignoring any exceptions
+     */
+    @Override
+    public void close()
+        throws IOException
+    {
+        try { zip.close(); } catch ( Exception ignore ) { }
+        try { fsin.close(); } catch ( Exception ignore ) { }
+    }
+}
