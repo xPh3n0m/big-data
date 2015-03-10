@@ -40,8 +40,15 @@ public class WordCount {
       Path outputPath = FileOutputFormat.getOutputPath(context);
       outputPath = new Path(outputPath.toString() + "/" + filename);
       URI uri = outputPath.toUri();
-
-      FileUtils.writeByteArrayToFile(new File(uri.getPath()), value.copyBytes());
+      
+      Configuration conf = new Configuration();
+      FileSystem fs = FileSystem.get(uri, conf);
+      
+      FSDataOutputStream fsd = fs.create(outputPath);
+      fsd.writeBytes(value.toString());
+      fsd.close();
+      
+      //FileUtils.writeByteArrayToFile(, value.copyBytes());
   }
 }
   

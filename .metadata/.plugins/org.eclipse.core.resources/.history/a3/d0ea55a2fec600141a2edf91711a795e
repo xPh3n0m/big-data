@@ -41,7 +41,7 @@ public class WordCount {
       outputPath = new Path(outputPath.toString() + "/" + filename);
       URI uri = outputPath.toUri();
 
-      FileUtils.writeByteArrayToFile(new File(uri.getPath()), value.copyBytes());
+      FileUtils.writeByteArrayToFile(new File(outputPath.toString() + "/" + filename), value.copyBytes());
   }
 }
   

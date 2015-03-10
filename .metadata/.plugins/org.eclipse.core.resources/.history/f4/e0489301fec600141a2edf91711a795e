@@ -8,7 +8,6 @@ import java.util.StringTokenizer;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.BytesWritable;
@@ -40,8 +39,14 @@ public class WordCount {
       Path outputPath = FileOutputFormat.getOutputPath(context);
       outputPath = new Path(outputPath.toString() + "/" + filename);
       URI uri = outputPath.toUri();
-
-      FileUtils.writeByteArrayToFile(new File(uri.getPath()), value.copyBytes());
+      
+      Configuration conf = new Configuration();
+      FileSystem fs = FileSystem.get(uri, conf);
+      
+      fs.create(outputPath);
+      
+      
+      FileUtils.writeByteArrayToFile(new File(uri.getPath() + "/" + filename), value.copyBytes());
   }
 }
   
