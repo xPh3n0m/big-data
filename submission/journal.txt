@@ -1,0 +1,28 @@
+The idea to implement the gunzip map reduce was in the beggining to extend the classes InputFormat and RecordReader in order to handle gzip files.
+
+Indeed, by default, the RecordReader will split a file into lines and provide it to the mapper.
+
+In this case, as it is not possible to split gzip files, I needed to change the FileInputFormat for it not to break gzip files.
+The GzipFileRecordReader then uses a CompressionCodec to gunzip files. The idea is that each time the method nextKeyValue() is called, it will provide a Key-Value pair containing the path to the gzip file, and the uncompressed file. The mapper can then write the decompressed file without the .gz extension and with the decompressed data in the output folder.
+
+A reducer was not required in that case, as I simply write the decompressed file in the mapper.
+
+To do the above, I had to check the javadoc of the following classes:
+org.apache.hadoop.mapreduce.lib.input.FileInputFormat
+org.apache.hadoop.mapreduce.lib.input.FileOutputFormat
+org.apache.hadoop.mapreduce.RecordReader
+org.apache.hadoop.io.compress.CompressionCodec
+org.apache.hadoop.io.IOUtils
+org.apache.hadoop.fs.FileSystem
+org.apache.hadoop.io.BytesWritable
+org.apache.hadoop.mapreduce.lib.input.FileSplit
+
+In order to decompress the files, I needed to find the size of a decompressed gzip file. For this, I checked the specifications of gzip, which explained that the last 4 bytes of the gzip file is the length of the decompressed file.
+
+I have issues when trying to decompress the big dataset. Indeed, it seems that I get a negative decompressed file size which is problematic. For this reason, some files are not decompressed.
+
+I considered other approaches before taking this one, such as
+1. Not extending the FileInput and the RecordReader, but instead try to write line by line the decompressed file in the new file
+2. 
+
+I passed about 20 hours on this homework
