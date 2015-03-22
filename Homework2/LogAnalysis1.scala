@@ -49,6 +49,10 @@ val l3 = """2015-03-03 17:59:51,137 INFO org.apache.hadoop.yarn.server.resourcem
 
 
 import scala.util.parsing.combinator._
+import org.apache.spark.mllib.classification.SVMWithSGD
+import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.util.MLUtils
 
 
 abstract class LogLine extends java.io.Serializable
@@ -60,6 +64,7 @@ case class AppRequest(timestamp: String, user: String, ip: String, res: String, 
 case class AppStatus(t: String, app: String, old_status: String, new_status: String) extends LogLine
 case class ContainerAllocRelease(t: String, user: String, op: String, tgt: String, res: String, app: String, cont: String) extends LogLine
 case class ContainerStatus(t: String, app: String, old_status: String, new_status: String) extends LogLine
+
 
 
 // Yarn Log Parser
@@ -81,6 +86,21 @@ object LogP extends RegexParsers with java.io.Serializable {
         ~",finalStatus="~ident ^^ {
        case t~_~app~_~name~_~user~_~state~_~url~_~host~_~stime~_~etime~_~finalStatus =>
          AppSummary(t, app, name, user, state, url, host, stime, etime, finalStatus)
+    }
+  | timestamp
+        ~"INFO org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppImpl: "~ident
+        ~"State change from"~ident
+        ~"to "~ident ^^ {
+       case t~_~app~_~old_status~_~new_status => AppStatus(t, app, old_status, new_status)
+    }
+  | timestamp
+        ~"INFO org.apache.hadoop.yarn.server.resourcemanager.RMAuditLogger: USER="~ident
+        ~"OPERATION="~identW
+        ~"TARGET="~ident
+        ~"RESULT="~ident
+        ~"APPID="~ident
+        ~"CONTAINERID="~ident ^^ {
+       case t~_~user~_~op~_~tgt~_~res~_~app~_~cont => ContainerAllocRelease(t, user, op, tgt, res, app, cont)
     }
   )
 
@@ -182,6 +202,8 @@ object LogAnalysis {
     val sc = new SparkContext(new SparkConf().setAppName("LogAnalysis"))
     val lines = sc.textFile("hdfs:///datasets/clusterlogs/yarn-yarn-resourcemanager-master1.log*")
 
+    def parseFinalStatus(l: String): LogLine =
+      LogP.parse(LogP.logline, l).getOrElse(UnknownLine())
 
     def parseLogAppStatus(l: String): LogLine =
       LogAppStatus.parse(LogAppStatus.logline, l).getOrElse(UnknownLine())
@@ -193,8 +215,23 @@ object LogAnalysis {
     parseLine(l2)
 */
 
+    def e(a: LogLine) = a match {
+      case AppSummary(t, app, name, user, state, url, host, stime, etime, "FAILED") => List(Tuple2(app, LabeledPoint(0.0, Vectors.sparse(3, Array(0, 2), Array(1.0, 3.0)))))
+      case AppSummary(t, app, name, user, state, url, host, stime, etime, "SUCCEEDED") => List(Tuple2(app, LabeledPoint(1.0, Vectors.sparse(3, Array(0, 2), Array(1.0, 3.0)))))
+      case _ => List()
+    }
+
+    def d(a: LogLine) = a match {
+      case AppSummary(t, app, name, user, state, url, host, stime, etime, "FAILED") => List(Tuple2(app, (0, 0.0)))
+      case AppSummary(t, app, name, user, state, url, host, stime, etime, "SUCCEEDED") => List(Tuple2(app, (0, 1.0)))
+      case AppStatus(t, app, old_status, "FAILED") => List(Tuple2(app, (1, 2.0)))
+      case AppStatus(t, app, old_status, "FINISHED") => List(Tuple2(app, (1, 1.0)))
+      //case ContainerAllocRelease(t, user, op, tgt, res, app, cont) => List(Tuple2(app, cont))
+      case _ => List()
+    }
+
     def f(a: LogLine) = a match {
-      case AppStatus(t, app, old_status, new_status) => List(Tuple2(app, Tuple2(old_status, new_status)))
+      case AppStatus(t, app, old_status, new_status) => List(Tuple2(app, 1))
       case _ => List()
     }
 
@@ -203,14 +240,58 @@ object LogAnalysis {
       case _ => List()
     }
 
-    val appStatus = lines.map(l => parseLogAppStatus(l)).flatMap(f).groupBy(_._1).mapValues( _.map( _._2 ) )
-    val appContainers = lines.map(l => parseContainerAlloc(l)).flatMap(g).groupBy(_._1).mapValues( _.map( _._2 ) )
+    // Prepares vectors
+    def q(a: List[(Int, Double)]): LabeledPoint = a match {
+      case (0, x) :: xs => LabeledPoint(x, Vectors.dense(xs.map(_._2).toArray))
+      case xs => LabeledPoint(0.0, Vectors.dense(xs.map(_._2).toArray))
+    }
+
+
+    val finalLogs = lines.map(l => parseFinalStatus(l)).flatMap(d).groupBy(_._1).mapValues( _.map( _._2 ) )
+    val parsedLogs = finalLogs.mapValues(_.toList.sortWith( (x,y) => x._1 < y._1 )).mapValues(q).map(_._2)
+
+    val splits = parsedLogs.randomSplit(Array(0.6, 0.4), seed = 11L)
+    val training = splits(0).cache()
+    val test = splits(1)
+
+    // Run training algorithm to build the model
+    val numIterations = 100
+    val model = SVMWithSGD.train(training, numIterations)
+
+    // Clear the default threshold.
+    model.clearThreshold()
+
+    // Compute raw scores on the test set. 
+    val scoreAndLabels = test.map { point =>
+         val score = model.predict(point.features)
+                     (score, point.label)
+    }
+
+    scoreAndLabels.map{case(v,p) => println("score and labels = "  +v + ' ' + p)}.collect()
+
+
+    //parsedLogs.saveAsTextFile("app_final")
+
+    //val appStatus = lines.map(l => parseLogAppStatus(l)).flatMap(f).groupBy(_._1)
+    /*
+    def h(a: Tuple2) = a match {
+      case Tuple2(app, Tuple2("NEW", "NEW_SAVING")) => Features(a, Vector(1))
+      case _ => Features(a, Vector(0))
+    }
+    
+    for(a <- appStatus) {
+      val v = new Vector()
+      val feat = new Features(a._1, v)
+      for(stat <- a._2) {
+          case ("NEW", "NEW_SAVING") => v(1)
+      }
+    }
+    */
+    //val appContainers = lines.map(l => parseContainerAlloc(l)).flatMap(g).groupBy(_._1).mapValues( _.map( _._2 ) )
     //val ll = lines.map(l => parseLine(l)).flatMap(f).cache
-    appStatus.saveAsTextFile("app_status")  // in the user's HDFS home directory
-    appContainers.saveAsTextFile("app_containers")
+    //appStatus.saveAsTextFile("app_summaries")  // in the user's HDFS home directory
+    //appContainers.saveAsTextFile("app_containers")
 
     sc.stop()
   }
 }
-
-
